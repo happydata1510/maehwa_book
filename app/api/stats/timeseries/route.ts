@@ -35,8 +35,46 @@ export async function GET(req: NextRequest) {
   const where: any = { readDate: { gte: startSunday, lt: endExclusive } };
   if (readerName) where.reader = { name: readerName };
 
-  // TODO: Supabase 쿼리로 수정 필요
-  const rows: any[] = []; // 임시
+  // Supabase에서 읽기 기록 가져오기
+  let query = supabase
+    .from('readings')
+    .select('read_date')
+    .gte('read_date', startSunday.toISOString())
+    .lt('read_date', endExclusive.toISOString());
+
+  if (readerName) {
+    const { data: reader } = await supabase
+      .from('readers')
+      .select('id')
+      .eq('name', readerName)
+      .single();
+    
+    if (reader) {
+      query = query.eq('reader_id', reader.id);
+    } else {
+      // 리더가 없으면 빈 결과 반환
+      const emptyLabels = Array.from({ length: weeks }, (_, i) => {
+        const ws = new Date(startSunday);
+        ws.setDate(ws.getDate() + i * 7);
+        return `${isoWeekNumber(ws)}주`;
+      });
+      const emptyRanges = Array.from({ length: weeks }, (_, i) => {
+        const ws = new Date(startSunday);
+        ws.setDate(ws.getDate() + i * 7);
+        const we = new Date(ws);
+        we.setDate(we.getDate() + 6);
+        return `${ws.getMonth() + 1}.${ws.getDate()}~${we.getMonth() + 1}.${we.getDate()}`;
+      });
+      return NextResponse.json({ 
+        labels: emptyLabels, 
+        data: Array(weeks).fill(0), 
+        ranges: emptyRanges, 
+        year: endSunday.getFullYear() 
+      });
+    }
+  }
+
+  const { data: rows } = await query;
 
   const counts = Array.from({ length: weeks }, () => 0);
   const labels: string[] = [];
@@ -60,8 +98,8 @@ export async function GET(req: NextRequest) {
     ranges.push(`${ws.getMonth() + 1}.${ws.getDate()}~${we.getMonth() + 1}.${we.getDate()}`);
   }
 
-  for (const r of rows) {
-    const rd = new Date(r.readDate);
+  for (const r of (rows || [])) {
+    const rd = new Date(r.read_date);
     const ws = startOfSunday(rd);
     const idx = Math.floor((ws.getTime() - startSunday.getTime()) / (7 * 86400000));
     if (idx >= 0 && idx < weeks) counts[idx] += 1;

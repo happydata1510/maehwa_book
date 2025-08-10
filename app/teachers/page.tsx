@@ -8,16 +8,53 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const className = sp.className?.trim() ?? "";
-  // TODO: Supabase 쿼리로 수정 필요
-  const readers: any[] = []; // 임시
-  const stats: any[] = []; // 임시
-  const countByReader = new Map();
+  // 리더 목록 가져오기 (필터 적용)
+  let readersQuery = supabase.from('readers').select('*');
+  
+  if (q) {
+    readersQuery = readersQuery.ilike('name', `%${q}%`);
+  }
+  if (className) {
+    readersQuery = readersQuery.ilike('class_name', `%${className}%`);
+  }
+  
+  const { data: readers } = await readersQuery.order('name', { ascending: true });
 
-  const latestByReader: any[] = []; // 임시
+  // 각 리더별 읽기 횟수 계산
+  const countByReader = new Map();
+  if (readers && readers.length > 0) {
+    const { data: readingCounts } = await supabase
+      .from('readings')
+      .select('reader_id')
+      .in('reader_id', readers.map(r => r.id));
+
+    (readingCounts || []).forEach(reading => {
+      const readerId = reading.reader_id;
+      countByReader.set(readerId, (countByReader.get(readerId) || 0) + 1);
+    });
+  }
+
+  // 각 리더별 최근 읽은 책 정보
   const latestMap = new Map<number, { title: string; date: Date }>();
-  for (const r of latestByReader) {
-    if (r.readerId && !latestMap.has(r.readerId)) {
-      latestMap.set(r.readerId, { title: r.book.title, date: r.readDate });
+  if (readers && readers.length > 0) {
+    for (const reader of readers) {
+      const { data: latestReading } = await supabase
+        .from('readings')
+        .select(`
+          read_date,
+          book:books(title)
+        `)
+        .eq('reader_id', reader.id)
+        .order('read_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (latestReading) {
+        latestMap.set(reader.id, {
+          title: (latestReading.book as any)?.title || '제목 없음',
+          date: new Date(latestReading.read_date)
+        });
+      }
     }
   }
 
@@ -48,15 +85,15 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
             </tr>
           </thead>
           <tbody>
-            {readers.map((r) => (
+            {(readers || []).map((r) => (
               <tr key={r.id} className="border-t">
-                <td className="px-3 py-2">{r.className ?? "-"}</td>
+                <td className="px-3 py-2">{r.class_name ?? "-"}</td>
                 <td className="px-3 py-2">
                   <Link className="text-pink-600" href={`/teachers/${encodeURIComponent(r.name)}`}>{r.name}</Link>
                 </td>
                 <td className="px-3 py-2 text-right">{countByReader.get(r.id) ?? 0}</td>
                 <td className="px-3 py-2">{latestMap.get(r.id)?.title ?? "-"}</td>
-                <td className="px-3 py-2">{latestMap.get(r.id)?.date ? new Date(latestMap.get(r.id)!.date).toLocaleDateString() : "-"}</td>
+                <td className="px-3 py-2">{latestMap.get(r.id)?.date ? latestMap.get(r.id)!.date.toLocaleDateString() : "-"}</td>
               </tr>
             ))}
           </tbody>
