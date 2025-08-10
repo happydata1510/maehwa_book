@@ -17,7 +17,16 @@ export default function StatsBar() {
       const params = new URLSearchParams();
       if (readerName) params.set("readerName", readerName);
       const res = await fetch(`/api/reader-stats?${params.toString()}`);
-      const json = await res.json();
+      if (!res.ok) {
+        setData({ count: 0, latestTitle: null, latestDate: null });
+        return;
+      }
+      const text = await res.text();
+      if (!text) {
+        setData({ count: 0, latestTitle: null, latestDate: null });
+        return;
+      }
+      const json = JSON.parse(text);
       setData(json);
       if (json?.count != null) {
         const thresholds = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];

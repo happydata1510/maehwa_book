@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import prisma from "@/app/lib/prisma";
+import { supabase } from "@/app/lib/supabase";
 
 // GET /api/notifications -> milestone alerts (100,200,...)
 export async function GET() {

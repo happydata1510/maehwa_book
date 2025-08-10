@@ -2,7 +2,7 @@ import Link from "next/link";
 import BadgeGrid from "@/app/components/BadgeGrid";
 import ReaderSelector from "@/app/components/ReaderSelector";
 import StatsBar from "@/app/components/StatsBar";
-import prisma from "@/app/lib/prisma";
+import { supabase } from "@/app/lib/supabase";
 import ReadingForm from "./reading-form";
 
 export default async function Home() {

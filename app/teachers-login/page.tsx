@@ -1,8 +1,16 @@
 "use client";
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function TeachersLoginPage() {
+  return (
+    <Suspense fallback={<div className="max-w-sm mx-auto p-6">로딩 중…</div>}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const [code, setCode] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const router = useRouter();

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import prisma from "@/app/lib/prisma";
+import { supabase } from "@/app/lib/supabase";
 
 // 간단 룰 기반 + 최근/인기 데이터로 답변 흉내. 실제 GPT 연동은 추후 .env API 키로 확장
 export async function POST(req: NextRequest) {

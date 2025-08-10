@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/app/lib/prisma";
+import { supabase } from "@/app/lib/supabase";
 
 // GET /api/stats/timeseries?readerName=&weeks=10&anchorMonth=YYYY-MM
 export async function GET(req: NextRequest) {
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Trim leading zero-weeks so length reflects actual data (<= weeks)
-  let firstIdx = counts.findIndex((v) => v > 0);
+  const firstIdx = counts.findIndex((v) => v > 0);
   if (firstIdx === -1) {
     return NextResponse.json({ labels: [], data: [], ranges: [], year: endSunday.getFullYear() });
   }

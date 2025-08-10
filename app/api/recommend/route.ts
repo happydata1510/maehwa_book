@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/app/lib/prisma";
+import { supabase } from "@/app/lib/supabase";
 
 // Very simple rule-based recommender using existing DB + popularity
 export async function GET(req: NextRequest) {

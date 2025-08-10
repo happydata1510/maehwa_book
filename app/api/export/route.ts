@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/app/lib/prisma";
+import { supabase } from "@/app/lib/supabase";
 
 // GET /api/export?readerName= (optional) -> CSV
 export async function GET(req: NextRequest) {

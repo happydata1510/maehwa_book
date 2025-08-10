@@ -32,8 +32,15 @@ export default function ReaderSelector({ onChange }: { onChange?: (name: string 
     if (form.className) payload.className = form.className.trim();
     if (form.parentPhone) payload.parentPhone = form.parentPhone.trim();
     if (form.age) payload.age = Number(form.age);
-    const res = await fetch("/api/readers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/readers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = "등록 실패";
+        try { const j = JSON.parse(text); msg = j.error ?? msg; } catch {}
+        alert(msg);
+        return;
+      }
       const json = await res.json();
       const reader = json.reader as Reader;
       setReaders((prev) => [...prev.filter((r) => r.name !== reader.name), reader].sort((a, b) => a.name.localeCompare(b.name)));
@@ -41,6 +48,8 @@ export default function ReaderSelector({ onChange }: { onChange?: (name: string 
       setOpen(false);
       setForm({ name: "", className: "", parentPhone: "", age: "" });
       alert(json.message ?? "등록되었습니다.");
+    } catch (e) {
+      alert("네트워크 오류로 등록에 실패했습니다.");
     }
   };
 

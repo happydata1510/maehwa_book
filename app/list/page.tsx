@@ -1,4 +1,4 @@
-import prisma from "@/app/lib/prisma";
+import { supabase } from "@/app/lib/supabase";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
