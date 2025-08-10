@@ -8,22 +8,12 @@ export default async function TeachersPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const className = sp.className?.trim() ?? "";
-  const readers = await prisma.reader.findMany({
-    where: {
-      AND: [
-        q ? { name: { contains: q } } : {},
-        className ? { className } : {},
-      ],
-    },
-    orderBy: { className: "asc" },
-  });
-  const stats = await prisma.reading.groupBy({ by: ["readerId"], _count: { readerId: true } });
-  const countByReader = new Map(stats.map((s) => [s.readerId, s._count.readerId] as const));
+  // TODO: Supabase 쿼리로 수정 필요
+  const readers: any[] = []; // 임시
+  const stats: any[] = []; // 임시
+  const countByReader = new Map();
 
-  const latestByReader = await prisma.reading.findMany({
-    orderBy: { readDate: "desc" },
-    include: { book: true },
-  });
+  const latestByReader: any[] = []; // 임시
   const latestMap = new Map<number, { title: string; date: Date }>();
   for (const r of latestByReader) {
     if (r.readerId && !latestMap.has(r.readerId)) {

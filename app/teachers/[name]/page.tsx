@@ -5,12 +5,9 @@ export const dynamic = "force-dynamic";
 export default async function TeacherStudentPage({ params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
   const decoded = decodeURIComponent(name);
-  const reader = await prisma.reader.findFirst({ where: { name: decoded } });
-  const items = await prisma.reading.findMany({
-    where: { reader: { name: decoded } },
-    orderBy: { readDate: "desc" },
-    include: { book: true },
-  });
+  // TODO: Supabase 쿼리로 수정 필요
+  const reader: any = null; // 임시
+  const items: any[] = []; // 임시
   const total = items.length;
   const nextTarget = [100,200,300,400,500,600,700,800,900,1000].find((t) => t > total) ?? null;
   const remaining = nextTarget ? nextTarget - total : null;
