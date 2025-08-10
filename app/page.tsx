@@ -6,15 +6,9 @@ import { supabase } from "@/app/lib/supabase";
 import ReadingForm from "./reading-form";
 
 export default async function Home() {
-  const total = await prisma.reading.count();
-  const page = 1;
-  const pageSize = 10;
-  const items = await prisma.reading.findMany({
-    orderBy: { readDate: "desc" },
-    include: { book: true, reader: true },
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-  });
+  // TODO: Supabase 쿼리로 수정 필요
+  const total = 0; // 임시
+  const items: any[] = []; // 임시
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-8">
