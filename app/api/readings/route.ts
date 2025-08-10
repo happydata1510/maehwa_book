@@ -9,21 +9,38 @@ export async function GET(req: NextRequest) {
     const pageSize = Number(searchParams.get("pageSize") ?? "10") || 10;
     const readerName = searchParams.get("readerName") ?? undefined;
 
-    const where: any = {};
-    if (readerName) where.reader = { name: readerName };
+    let query = supabase
+      .from('readings')
+      .select(`
+        *,
+        book:books(*),
+        reader:readers(*)
+      `)
+      .order('read_date', { ascending: false });
 
-    const [total, items] = await Promise.all([
-      prisma.reading.count({ where }),
-      prisma.reading.findMany({
-        where,
-        orderBy: { readDate: "desc" },
-        include: { book: true, reader: true },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
+    if (readerName) {
+      query = query.eq('reader.name', readerName);
+    }
+
+    // 페이지네이션을 위한 카운트
+    let countQuery = supabase
+      .from('readings')
+      .select('*', { count: 'exact', head: true });
+
+    if (readerName) {
+      countQuery = countQuery.eq('reader.name', readerName);
+    }
+
+    // 데이터와 카운트를 병렬로 가져오기
+    const [{ data: items, error: itemsError }, { count: total, error: countError }] = await Promise.all([
+      query.range((page - 1) * pageSize, page * pageSize - 1),
+      countQuery
     ]);
 
-    return NextResponse.json({ total, page, pageSize, items });
+    if (itemsError) throw itemsError;
+    if (countError) throw countError;
+
+    return NextResponse.json({ total: total || 0, page, pageSize, items: items || [] });
   } catch (e) {
     console.error("/api/readings GET error", e);
     return NextResponse.json({ error: "internal" }, { status: 500 });
@@ -34,32 +51,69 @@ export async function GET(req: NextRequest) {
 // body: { readDate, title, author, readerName, notes }
 export async function POST(req: NextRequest) {
   try {
-    // Demo 보호: Vercel+SQLite 환경에서는 쓰기 제한 가능
-    if (process.env.VERCEL && (process.env.DATABASE_URL ?? "").startsWith("file:")) {
-      return NextResponse.json({ error: "데모 환경에서는 기록이 제한됩니다. 로컬 실행 또는 외부 DB를 설정하세요." }, { status: 503 });
-    }
     const body = await req.json();
     const { readDate, title, author, readerName, notes } = body ?? {};
     if (!title || !author || !readDate)
       return NextResponse.json({ error: "title, author, readDate required" }, { status: 400 });
 
-    const [book, reader] = await Promise.all([
-      prisma.book.upsert({
-        where: { title_author: { title, author } },
-        update: {},
-        create: { title, author },
-      }),
-      readerName ? prisma.reader.upsert({ where: { name: readerName }, update: {}, create: { name: readerName } }) : Promise.resolve(null),
-    ]);
+    // 1. 책 생성/조회
+    let book;
+    const { data: existingBook } = await supabase
+      .from('books')
+      .select('*')
+      .eq('title', title)
+      .eq('author', author)
+      .single();
 
-    const reading = await prisma.reading.create({
-      data: {
-        readDate: new Date(readDate),
+    if (existingBook) {
+      book = existingBook;
+    } else {
+      const { data: newBook, error: bookError } = await supabase
+        .from('books')
+        .insert({ title, author })
+        .select()
+        .single();
+
+      if (bookError) throw bookError;
+      book = newBook;
+    }
+
+    // 2. 리더 생성/조회 (선택사항)
+    let reader = null;
+    if (readerName) {
+      const { data: existingReader } = await supabase
+        .from('readers')
+        .select('*')
+        .eq('name', readerName)
+        .single();
+
+      if (existingReader) {
+        reader = existingReader;
+      } else {
+        const { data: newReader, error: readerError } = await supabase
+          .from('readers')
+          .insert({ name: readerName })
+          .select()
+          .single();
+
+        if (readerError) throw readerError;
+        reader = newReader;
+      }
+    }
+
+    // 3. 읽기 기록 생성
+    const { data: reading, error: readingError } = await supabase
+      .from('readings')
+      .insert({
+        read_date: new Date(readDate).toISOString(),
         notes: notes ?? null,
-        bookId: book.id,
-        readerId: reader?.id ?? null,
-      },
-    });
+        book_id: book.id,
+        reader_id: reader?.id ?? null,
+      })
+      .select()
+      .single();
+
+    if (readingError) throw readingError;
 
     return NextResponse.json(reading, { status: 201 });
   } catch (e) {
@@ -67,4 +121,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }
 }
-

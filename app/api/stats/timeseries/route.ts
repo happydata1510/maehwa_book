@@ -35,7 +35,8 @@ export async function GET(req: NextRequest) {
   const where: any = { readDate: { gte: startSunday, lt: endExclusive } };
   if (readerName) where.reader = { name: readerName };
 
-  const rows = await prisma.reading.findMany({ where, orderBy: { readDate: "asc" } });
+  // TODO: Supabase 쿼리로 수정 필요
+  const rows: any[] = []; // 임시
 
   const counts = Array.from({ length: weeks }, () => 0);
   const labels: string[] = [];

@@ -7,13 +7,20 @@ export async function GET(req: NextRequest) {
   const readerName = searchParams.get("readerName") ?? undefined;
   const where: any = {};
   if (readerName) where.reader = { name: readerName };
-  const rows = await prisma.reading.findMany({
+  // TODO: Supabase 쿼리로 수정 필요
+  const { data: rows } = await supabase.from('readings').select(`
+    *,
+    book:books(*),
+    reader:readers(*)
+  `) || { data: [] };
+  
+  /*const rows = await prisma.reading.findMany({
     where,
     orderBy: { readDate: "desc" },
     include: { book: true, reader: true },
-  });
+  });*/
   const header = ["readDate", "title", "author", "readerName"].join(",");
-  const body = rows
+  const body = (rows || [])
     .map((r) => [
       new Date(r.readDate).toISOString().slice(0, 10),
       JSON.stringify(r.book.title),

@@ -15,17 +15,13 @@ export async function GET(req: NextRequest) {
   }
   if (readerName) where.reader = { name: readerName };
 
-  const total = await prisma.reading.count({ where });
+  // TODO: Supabase 쿼리로 수정 필요
+  const total = 0; // 임시
 
-  const topBooks = await prisma.reading.groupBy({
-    by: ["bookId"],
-    where,
-    _count: { bookId: true },
-    orderBy: { _count: { bookId: "desc" } },
-    take: 10,
-  });
-  const bookIds = topBooks.map((b) => b.bookId);
-  const books = await prisma.book.findMany({ where: { id: { in: bookIds } } });
+  // TODO: Supabase 쿼리로 수정 필요
+  const topBooks: any[] = []; // 임시
+  const bookIds: any[] = []; // 임시
+  const books: any[] = []; // 임시
 
   return NextResponse.json({ total, topBooks: topBooks.map((t) => ({ count: t._count.bookId, book: books.find((b) => b.id === t.bookId) })) });
 }

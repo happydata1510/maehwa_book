@@ -7,15 +7,9 @@ export default async function ListPage({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const page = Number(sp.page ?? "1") || 1;
   const pageSize = 10;
-  const [total, items] = await Promise.all([
-    prisma.reading.count(),
-    prisma.reading.findMany({
-      orderBy: { readDate: "desc" },
-      include: { book: true, reader: true },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-  ]);
+  // TODO: Supabase 쿼리로 수정 필요
+  const total = 0; // 임시
+  const items: any[] = []; // 임시
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (

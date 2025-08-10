@@ -16,14 +16,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Top popular among filtered books
-  const popular = await prisma.reading.groupBy({
-    by: ["bookId"],
-    _count: { bookId: true },
-    orderBy: { _count: { bookId: "desc" } },
-    take: limit,
-  });
-  const ids = popular.map((p) => p.bookId);
-  const books = await prisma.book.findMany({ where: { id: { in: ids }, ...whereBook } });
+  // TODO: Supabase 쿼리로 수정 필요
+  const popular: any[] = []; // 임시
+  const books: any[] = []; // 임시
 
   return NextResponse.json(books);
 }
