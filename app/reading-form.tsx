@@ -2,7 +2,11 @@
 import React, { useEffect, useState } from "react";
 import BookAutocomplete from "@/app/components/BookAutocomplete";
 
-export default function ReadingForm() {
+interface ReadingFormProps {
+  onRecordAdded?: () => void;
+}
+
+export default function ReadingForm({ onRecordAdded }: ReadingFormProps) {
   const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -10,9 +14,39 @@ export default function ReadingForm() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // 아이 선택 상태를 실시간으로 감지
   useEffect(() => {
-    const saved = localStorage.getItem("activeReaderName");
-    if (saved && !readerName) setReaderName(saved);
+    const updateReaderName = () => {
+      const saved = localStorage.getItem("activeReaderName");
+      setReaderName(saved || "");
+    };
+
+    // 초기 로드
+    updateReaderName();
+
+    // localStorage 변경 감지
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "activeReaderName") {
+        updateReaderName();
+      }
+    };
+
+    // 포커스 이벤트로 다른 탭에서의 변경사항 감지
+    const handleFocus = () => {
+      updateReaderName();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleFocus);
+
+    // 주기적으로 체크 (같은 페이지 내에서 변경된 경우)
+    const interval = setInterval(updateReaderName, 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleSelect = (b: { title: string; author: string }) => {
@@ -35,9 +69,21 @@ export default function ReadingForm() {
         body: JSON.stringify({ readDate: date, title, author, readerName: effectiveReaderName }),
       });
       if (!res.ok) throw new Error("저장 실패");
+      
       setMessage("기록되었습니다.");
       setTitle("");
       setAuthor("");
+      
+      // 부모 컴포넌트에 기록 추가 알림
+      if (onRecordAdded) {
+        onRecordAdded();
+      }
+      
+      // 2초 후 메시지 자동 제거
+      setTimeout(() => {
+        setMessage(null);
+      }, 2000);
+      
     } catch (e) {
       const msg = e instanceof Error ? e.message : "오류가 발생했습니다";
       setMessage(msg);
@@ -58,8 +104,15 @@ export default function ReadingForm() {
         </div>
         <div>
           <label className="text-xs text-gray-600">어린이 이름</label>
-          <input className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300" value={readerName} onChange={(e) => setReaderName(e.target.value)} placeholder="예: 하린" />
-          <p className="text-[11px] text-gray-500 mt-1">선택하지 않으면 상단 선택한 아이(있을 경우)로 저장됩니다.</p>
+          <input 
+            className="w-full border rounded-lg px-3 py-2 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-pink-300" 
+            value={readerName || "전체 기록으로 저장"} 
+            readOnly
+            placeholder="아이를 선택해주세요" 
+          />
+          <p className="text-[11px] text-gray-500 mt-1">
+            {readerName ? `${readerName}의 기록으로 저장됩니다.` : "상단에서 아이를 선택하거나 전체 기록으로 저장됩니다."}
+          </p>
         </div>
         <div className="sm:col-span-2">
           <label className="text-xs text-gray-600">제목/글쓴이 자동완성</label>

@@ -1,26 +1,56 @@
+"use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import BadgeGrid from "@/app/components/BadgeGrid";
 import ReaderSelector from "@/app/components/ReaderSelector";
 import StatsBar from "@/app/components/StatsBar";
-import { supabase } from "@/app/lib/supabase";
 import ReadingForm from "./reading-form";
 
-export default async function Home() {
-  // 최근 읽기 기록 가져오기
-  const { data: items } = await supabase
-    .from('readings')
-    .select(`
-      *,
-      book:books(*),
-      reader:readers(*)
-    `)
-    .order('read_date', { ascending: false })
-    .limit(10);
+interface Reading {
+  id: string;
+  read_date: string;
+  book: {
+    title: string;
+    author: string;
+  };
+  reader: {
+    name: string;
+  } | null;
+}
 
-  // 전체 읽기 기록 수 계산
-  const { count: total } = await supabase
-    .from('readings')
-    .select('*', { count: 'exact', head: true });
+export default function Home() {
+  const [items, setItems] = useState<Reading[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [updateKey, setUpdateKey] = useState(0);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      // 최근 읽기 기록 가져오기
+      const itemsRes = await fetch('/api/readings?pageSize=10');
+      const itemsData = await itemsRes.json();
+      setItems(itemsData.items || []);
+      setTotal(itemsData.total || 0);
+      
+    } catch (error) {
+      console.error('데이터 로딩 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleRecordAdded = () => {
+    // 새 기록이 추가되면 데이터 다시 로드
+    fetchData();
+    // StatsBar 강제 업데이트를 위한 key 변경
+    setUpdateKey(prev => prev + 1);
+  };
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-8">
@@ -36,36 +66,42 @@ export default async function Home() {
         <div className="flex items-center justify-between">
           <ReaderSelector />
         </div>
-        <StatsBar />
+        <StatsBar key={updateKey} />
       </header>
 
-      <ReadingForm />
+      <ReadingForm onRecordAdded={handleRecordAdded} />
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">최근 기록</h2>
           <Link href="/list" className="text-sm text-blue-600">전체 보기</Link>
         </div>
-        <ul className="divide-y border rounded-2xl bg-white/80 backdrop-blur shadow-sm">
-          {(items || []).map((r) => (
-            <li key={r.id} className="p-3 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{r.book?.title || '제목 없음'}</div>
-                <div className="text-xs text-gray-500">{r.book?.author || '작가 없음'} • {new Date(r.read_date).toLocaleDateString()}</div>
-              </div>
-              <div className="text-xs text-gray-500">{r.reader?.name ?? ""}</div>
-            </li>
-          ))}
-          {(!items || items.length === 0) && (
-            <li className="p-6 text-center text-gray-500">
-              아직 읽기 기록이 없습니다. 첫 번째 책을 기록해보세요!
-            </li>
-          )}
-        </ul>
+        {loading ? (
+          <div className="p-6 text-center text-gray-500">
+            로딩 중...
+          </div>
+        ) : (
+          <ul className="divide-y border rounded-2xl bg-white/80 backdrop-blur shadow-sm">
+            {items.map((r) => (
+              <li key={r.id} className="p-3 flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{r.book?.title || '제목 없음'}</div>
+                  <div className="text-xs text-gray-500">{r.book?.author || '작가 없음'} • {new Date(r.read_date).toLocaleDateString()}</div>
+                </div>
+                <div className="text-xs text-gray-500">{r.reader?.name ?? ""}</div>
+              </li>
+            ))}
+            {items.length === 0 && (
+              <li className="p-6 text-center text-gray-500">
+                아직 읽기 기록이 없습니다. 첫 번째 책을 기록해보세요!
+              </li>
+            )}
+          </ul>
+        )}
       </section>
 
       <section>
-        <BadgeGrid totalCount={total || 0} />
+        <BadgeGrid totalCount={total} />
       </section>
     </div>
   );
