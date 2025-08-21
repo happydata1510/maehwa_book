@@ -180,12 +180,16 @@ export async function POST(req: NextRequest) {
         }));
 
         const ageText = age ? `${age}세` : '유치원생(3-7세)';
-        const webPrompt = `${ageText} 아이에게 적합한 "${topic}" 주제의 동화책, 그림책을 3권 이하로 골라주세요. 아래 후보 중 실제 존재하는 동화책 위주로 선택하되, 다음 책들은 제외해주세요: ${excludeBooks.join(', ') || '없음'}. 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록 형태. 후보: ${JSON.stringify(candidates).slice(0, 5000)}`;
+        const webPrompt = `${ageText} 아이에게 적합한 "${topic}" 주제의 한국어 동화책, 그림책을 3권 이하로 골라주세요. 아래 후보 중 실제 존재하는 동화책 위주로 선택하되, 다음 책들은 제외해주세요: ${excludeBooks.join(', ') || '없음'}. 
+
+중요: 제목이 한자로 된 책은 절대 추천하지 마세요. 반드시 한글 제목의 한국어 동화책만 추천하세요.
+
+각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록 형태. 후보: ${JSON.stringify(candidates).slice(0, 5000)}`;
 
         const completion = await openai.chat.completions.create({
           model: 'gpt-4.1-nano',
           messages: [
-            { role: 'system', content: '당신은 유치원생을 위한 동화책 전문 큐레이터입니다. 동화책, 그림책, 창작동화만 추천하세요. 한국어로 간결하고 따뜻하게 답변합니다. 응답은 JSON 배열 형태로만 출력하세요: [{"title":"제목","author":"지은이","publisher":"출판사","summary":"줄거리"}]' },
+            { role: 'system', content: '당신은 유치원생을 위한 한국어 동화책 전문 큐레이터입니다. 한글 제목의 동화책, 그림책, 창작동화만 추천하세요. 한자나 영어 제목의 책은 절대 추천하지 마세요. 한국어로 간결하고 따뜻하게 답변합니다. 응답은 JSON 배열 형태로만 출력하세요: [{"title":"제목","author":"지은이","publisher":"출판사","summary":"줄거리"}]' },
             { role: 'user', content: webPrompt }
           ],
           temperature: 0.2,
@@ -205,9 +209,19 @@ export async function POST(req: NextRequest) {
           return new Response(JSON.stringify({ reply }), { headers: { 'Content-Type': 'application/json' } });
         }
 
-        // Google Books API로 실제 존재 여부 확인
+        // 한자 제목 필터링 함수
+        const hasChineseCharacters = (text: string) => {
+          return /[\u4e00-\u9fff]/.test(text);
+        };
+
+        // Google Books API로 실제 존재 여부 확인 및 한자 제목 필터링
         const verifiedBooks = [];
         for (const book of recommendations) {
+          // 한자 제목 제외
+          if (hasChineseCharacters(book.title)) {
+            continue;
+          }
+          
           try {
             const query = encodeURIComponent(`${book.title} ${book.author}`);
             const gbRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${query}&langRestrict=ko&maxResults=5`);
@@ -217,16 +231,25 @@ export async function POST(req: NextRequest) {
               // 실제 존재하는 책으로 확인됨
               const item = gbData.items[0];
               const volumeInfo = item.volumeInfo;
+              const finalTitle = volumeInfo.title || book.title;
+              
+              // Google Books에서 가져온 제목도 한자 체크
+              if (hasChineseCharacters(finalTitle)) {
+                continue;
+              }
+              
               verifiedBooks.push({
-                title: volumeInfo.title || book.title,
+                title: finalTitle,
                 author: (volumeInfo.authors && volumeInfo.authors[0]) || book.author,
                 publisher: volumeInfo.publisher || book.publisher || '출판사 미상',
                 summary: book.summary
               });
             }
           } catch (e) {
-            // API 오류시 원본 정보 유지
-            verifiedBooks.push(book);
+            // API 오류시 원본 정보 유지 (한자 제목이 아닌 경우만)
+            if (!hasChineseCharacters(book.title)) {
+              verifiedBooks.push(book);
+            }
           }
           
           if (verifiedBooks.length >= 3) break;
@@ -280,12 +303,16 @@ export async function POST(req: NextRequest) {
           }));
 
           const ageText = age ? `${age}세` : '유치원생(3-7세)';
-          const fallbackPrompt = `친구들이 읽었던 책이 부족해서 온라인 검색으로 찾아드렸어요. ${ageText} 아이에게 적합한 "${topic}" 주제의 동화책, 그림책을 3권 이하로 골라주세요. 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 후보: ${JSON.stringify(candidates).slice(0, 3000)}`;
+          const fallbackPrompt = `친구들이 읽었던 책이 부족해서 온라인 검색으로 찾아드렸어요. ${ageText} 아이에게 적합한 "${topic}" 주제의 한국어 동화책, 그림책을 3권 이하로 골라주세요. 
+
+중요: 제목이 한자로 된 책은 절대 추천하지 마세요. 반드시 한글 제목의 동화책만 추천하세요.
+
+각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 후보: ${JSON.stringify(candidates).slice(0, 3000)}`;
 
           const completion = await openai.chat.completions.create({
             model: 'gpt-4.1-nano',
             messages: [
-              { role: 'system', content: '당신은 유치원생을 위한 동화책 전문 큐레이터입니다. 동화책, 그림책, 창작동화만 추천하세요. 따뜻하고 간결하게 한국어로 답합니다.' },
+              { role: 'system', content: '당신은 유치원생을 위한 한국어 동화책 전문 큐레이터입니다. 한글 제목의 동화책, 그림책, 창작동화만 추천하세요. 한자나 영어 제목의 책은 절대 추천하지 마세요. 따뜻하고 간결하게 한국어로 답합니다.' },
               { role: 'user', content: fallbackPrompt }
             ],
             temperature: 0.4,
@@ -300,11 +327,15 @@ export async function POST(req: NextRequest) {
       }
 
       const ageText = age ? `${age}세` : '유치원생';
-      const histPrompt = `다음은 친구들이 최근에 읽었던 동화책 목록입니다: ${allBooksHistory}. ${ageText} 아이에게 적합한 동화책, 그림책을 3권 이하로 추천하고, 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록.`;
+      const histPrompt = `다음은 친구들이 최근에 읽었던 동화책 목록입니다: ${allBooksHistory}. ${ageText} 아이에게 적합한 한국어 동화책, 그림책을 3권 이하로 추천하고, 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 
+
+중요: 제목이 한자로 된 책은 절대 추천하지 마세요. 반드시 한글 제목의 동화책만 추천하세요.
+
+번호 목록.`;
       const completion = await openai.chat.completions.create({
         model: 'gpt-4.1-nano',
         messages: [
-          { role: 'system', content: '당신은 유치원생을 위한 동화책 전문 큐레이터입니다. 동화책, 그림책, 창작동화만 추천하세요. 따뜻하고 간결하게 한국어로 답합니다.' },
+          { role: 'system', content: '당신은 유치원생을 위한 한국어 동화책 전문 큐레이터입니다. 한글 제목의 동화책, 그림책, 창작동화만 추천하세요. 한자나 영어 제목의 책은 절대 추천하지 마세요. 따뜻하고 간결하게 한국어로 답합니다.' },
           { role: 'user', content: histPrompt }
         ],
         temperature: 0.4,
@@ -318,7 +349,7 @@ export async function POST(req: NextRequest) {
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-nano",
       messages: [
-        { role: "system", content: "당신은 매화유치원의 동화책 전문 추천 도우미입니다. 유치원생을 위한 동화책, 그림책, 창작동화만 추천하세요. 한국어로 간결하고 친근하게 답변하세요." },
+        { role: "system", content: "당신은 매화유치원의 한국어 동화책 전문 추천 도우미입니다. 유치원생을 위한 한글 제목의 동화책, 그림책, 창작동화만 추천하세요. 한자나 영어 제목의 책은 절대 추천하지 마세요. 한국어로 간결하고 친근하게 답변하세요." },
         { role: "user", content: prompt }
       ],
       temperature: 0.7,
