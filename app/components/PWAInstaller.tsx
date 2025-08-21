@@ -26,16 +26,21 @@ export default function PWAInstaller() {
   useEffect(() => {
     // 기기 유형 감지
     const userAgent = navigator.userAgent.toLowerCase();
+    let detectedDeviceType = 'unknown';
     if (/android/.test(userAgent)) {
-      setDeviceType('android');
+      detectedDeviceType = 'android';
     } else if (/iphone|ipad|ipod/.test(userAgent)) {
-      setDeviceType('ios');
+      detectedDeviceType = 'ios';
     } else if (/windows|mac|linux/.test(userAgent)) {
-      setDeviceType('desktop');
+      detectedDeviceType = 'desktop';
     }
+    setDeviceType(detectedDeviceType as any);
 
     // PWA가 이미 설치되었는지 확인
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const isInWebAppiOS = (window.navigator as any).standalone === true;
+    
+    if (isStandalone || isInWebAppiOS) {
       setIsInstalled(true);
       return;
     }
@@ -49,8 +54,15 @@ export default function PWAInstaller() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // iOS의 경우 수동으로 설치 버튼 표시
-    if (deviceType === 'ios' && !isInstalled) {
+    // 일정 시간 후 설치 버튼 표시 (beforeinstallprompt가 없어도)
+    const timer = setTimeout(() => {
+      if (!isStandalone && !isInWebAppiOS) {
+        setShowInstallButton(true);
+      }
+    }, 1000); // 1초 후 표시
+
+    // 개발/테스트용: 항상 버튼 표시 (PWA 조건 미충족시에도)
+    if (!isStandalone && !isInWebAppiOS) {
       setShowInstallButton(true);
     }
 
@@ -67,8 +79,9 @@ export default function PWAInstaller() {
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      clearTimeout(timer);
     };
-  }, [deviceType, isInstalled]);
+  }, []);
 
   const handleInstallClick = async () => {
     setShowModal(true);
