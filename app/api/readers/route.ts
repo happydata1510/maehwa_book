@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/app/lib/supabase";
 
 // GET /api/readers -> list readers
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const { data: readers, error } = await supabase
+    const { searchParams } = new URL(req.url);
+    const q = (searchParams.get("q") || "").trim();
+    let query = supabase
       .from('readers')
-      .select('*')
+      .select('id, name, class_name, parent_phone')
       .order('name', { ascending: true });
+
+    if (q) {
+      query = query.ilike('name', `%${q}%`);
+    }
+
+    const { data: readers, error } = await query;
 
     if (error) throw error;
 
@@ -17,6 +25,8 @@ export async function GET() {
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }
 }
+
+
 
 // POST /api/readers -> upsert reader { name, className?, parentPhone? }
 export async function POST(req: NextRequest) {

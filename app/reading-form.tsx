@@ -54,6 +54,8 @@ export default function ReadingForm({ onRecordAdded }: ReadingFormProps) {
     setAuthor(b.author);
   };
 
+
+
   const submit = async () => {
     if (!date || !title || !author) {
       setMessage("날짜, 제목, 글쓴이를 입력하세요");
@@ -118,6 +120,7 @@ export default function ReadingForm({ onRecordAdded }: ReadingFormProps) {
           <label className="text-xs text-gray-600">제목/글쓴이 자동완성</label>
           <BookAutocomplete onSelect={handleSelect} />
         </div>
+
         <div>
           <label className="text-xs text-gray-600">제목</label>
           <input className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300" value={title} onChange={(e) => setTitle(e.target.value)} />

@@ -1,14 +1,17 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 
-type Book = { id: number; title: string; author: string };
+type Book = { id?: number; title: string; author: string; reason?: string };
 
 export default function RecommendPage() {
   const [age, setAge] = useState<number | undefined>(5);
   const [books, setBooks] = useState<Book[]>([]);
-  const [chat, setChat] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  type ChatMsg = { role: "user" | "assistant"; content: string };
+  const [chat, setChat] = useState<ChatMsg[]>([]);
   const [readerName, setReaderName] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const CHAT_STORAGE_KEY = "mw_chat_history";
+  const [sending, setSending] = useState(false);
 
   // 선택된 아이 정보 가져오기
   useEffect(() => {
@@ -44,8 +47,11 @@ export default function RecommendPage() {
   const send = async () => {
     const msg = inputRef.current?.value?.trim();
     if (!msg) return;
-    setChat((c) => [...c, { role: "user", content: msg }]);
+    const nextHistory: ChatMsg[] = [...chat, { role: "user", content: msg }];
+    setChat(nextHistory);
     inputRef.current!.value = "";
+    if (sending) return;
+    setSending(true);
     
     try {
       const res = await fetch("/api/chat-recommend", { 
@@ -54,7 +60,8 @@ export default function RecommendPage() {
         body: JSON.stringify({ 
           message: msg, 
           age,
-          readerName: readerName || undefined
+          readerName: readerName || undefined,
+          history: nextHistory
         }) 
       });
       const data = await res.json();
@@ -62,24 +69,44 @@ export default function RecommendPage() {
     } catch (error) {
       console.error("채팅 추천 오류:", error);
       setChat((c) => [...c, { role: "assistant", content: "죄송해요, 일시적인 오류가 발생했습니다. 다시 시도해주세요." }]);
+    } finally {
+      setSending(false);
     }
   };
 
-  // 초기 환영 메시지 추가
+  // 초기 환영 메시지 또는 저장된 대화 복원
   useEffect(() => {
-    if (chat.length === 0) {
-      const welcomeMessage = readerName 
-        ? `안녕하세요! ${readerName}에게 맞는 책을 추천해드릴게요. 어떤 종류의 책을 찾고 계신가요? 🌸📚`
-        : "안녕하세요! 매화유치원 책 추천 도우미입니다. 어떤 책을 추천해드릴까요? 🌸📚";
-      
-      setChat([{ role: "assistant", content: welcomeMessage }]);
-    }
-  }, [readerName, chat.length]); // readerName과 chat.length 변경 시 업데이트
+    try {
+      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const sanitized: ChatMsg[] = parsed
+            .map((m: any): ChatMsg => ({
+              role: m?.role === "user" ? ("user" as const) : ("assistant" as const),
+              content: String(m?.content ?? "")
+            }))
+            .filter((m) => m.content.length > 0);
+          if (sanitized.length > 0) setChat(sanitized);
+          return;
+        }
+      }
+    } catch {}
+    const welcomeMessage = readerName 
+      ? `안녕하세요! ${readerName}에게 맞는 책을 추천해드릴게요. 어떤 종류의 책을 찾고 계신가요? 🌸📚`
+      : "안녕하세요! 매화유치원 책 추천 도우미입니다. 어떤 책을 추천해드릴까요? 🌸📚";
+    setChat([{ role: "assistant", content: welcomeMessage }]);
+  }, [readerName]);
+
+  // 대화 저장
+  useEffect(() => {
+    try { localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chat)); } catch {}
+  }, [chat]);
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-semibold" style={{ fontFamily: "var(--font-jua)" }}>
-        🤖 AI 추천도서 (Gemini)
+        🤖 AI 추천도서 (OpenAI GPT-4.1-nano)
       </h1>
       
       {/* 현재 선택된 아이와 연령 정보 */}
@@ -109,7 +136,7 @@ export default function RecommendPage() {
         <h2 className="font-semibold flex items-center gap-2">
           🤖 AI 책 추천 챗봇
           <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-            Google Gemini
+            OpenAI
           </span>
         </h2>
         <div className="max-h-80 overflow-auto space-y-2 bg-gray-50 rounded-lg p-3">
@@ -130,11 +157,17 @@ export default function RecommendPage() {
             ref={inputRef} 
             className="flex-1 border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300" 
             placeholder={readerName ? `${readerName}에게 추천할 책을 물어보세요!` : "어떤 책을 추천해드릴까요?"} 
-            onKeyDown={(e) => e.key === "Enter" && send()}
+            onKeyDown={(e) => {
+              // IME 조합 중 Enter 방지 (React 이벤트에서 안전히 조회)
+              const ev = e as unknown as { isComposing?: boolean; nativeEvent?: { isComposing?: boolean } };
+              const composing = (ev.isComposing ?? ev.nativeEvent?.isComposing) === true;
+              if (e.key === "Enter" && !composing) send();
+            }}
           />
           <button 
-            className="px-4 py-2 rounded-lg bg-pink-500 hover:bg-pink-600 text-white transition-colors" 
+            className="px-4 py-2 rounded-lg bg-pink-500 hover:bg-pink-600 text-white transition-colors disabled:opacity-60" 
             onClick={send}
+            disabled={sending}
           >
             보내기
           </button>
@@ -153,10 +186,11 @@ export default function RecommendPage() {
         </h2>
         <ul className="divide-y border rounded-2xl bg-white/80 backdrop-blur shadow-sm">
           {books.length > 0 ? (
-            books.map((b) => (
-              <li key={b.id} className="p-3">
+            books.map((b, idx) => (
+              <li key={b.id ?? `${b.title}-${idx}`} className="p-3">
                 <div className="font-medium">{b.title}</div>
                 <div className="text-xs text-gray-500">{b.author}</div>
+                {b.reason && <div className="text-xs text-gray-600 mt-1">{b.reason}</div>}
               </li>
             ))
           ) : (

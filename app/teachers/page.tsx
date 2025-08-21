@@ -111,12 +111,12 @@ async function Notifications() {
   const base = `${proto}://${host}`;
   const res = await fetch(`${base}/api/notifications`, { cache: "no-store" });
   const data = await res.json();
-  const alerts: Array<{ readerName: string; milestone: number }> = data.alerts ?? [];
+  const alerts: Array<{ readerName: string; milestone: number; remaining: number }> = data.alerts ?? [];
   if (alerts.length === 0) return null;
   return (
     <div className="rounded-xl border bg-yellow-50 text-yellow-900 p-3 text-sm">
       {alerts.map((a, i) => (
-        <div key={i}>🎉 {a.readerName} 학생이 {a.milestone}권을 달성했습니다!</div>
+        <div key={i}>🎯 {a.readerName} 학생이 {a.milestone}권 달성까지 {a.remaining}권 남았습니다!</div>
       ))}
     </div>
   );

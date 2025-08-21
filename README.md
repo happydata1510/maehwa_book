@@ -7,7 +7,7 @@
 - ✅ **독서 기록 관리**: 아이별 읽은 책 기록
 - ✅ **통계 및 분석**: 주간/월간 독서 통계
 - ✅ **뱃지 시스템**: 100권 단위 달성 뱃지
-- ✅ **AI 책 추천**: Google Gemini API 활용
+- ✅ **AI 책 추천**: OpenAI GPT-4.1-nano 활용
 - ✅ **교사 관리**: 비밀번호 보호된 교사 페이지
 - ✅ **CSV 내보내기**: 데이터 백업 기능
 
@@ -16,7 +16,7 @@
 - **Frontend**: Next.js 15, React, Tailwind CSS
 - **Backend**: Next.js API Routes
 - **Database**: Supabase (PostgreSQL)
-- **AI**: Google Gemini 1.5 Flash
+- **AI**: OpenAI GPT-4.1-nano
 - **Deployment**: Vercel
 
 ## 환경변수 설정
@@ -28,11 +28,14 @@
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-# Google Gemini AI
-GEMINI_API_KEY=your_gemini_api_key
+# OpenAI (정식 서비스)
+OPENAI_API_KEY=your_openai_api_key
 
 # 교사 비밀번호 (기본값: 1234)
 NEXT_PUBLIC_TEACHER_CODE=1234
+
+# Next.js
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
 ## 데이터베이스 스키마
@@ -90,7 +93,7 @@ npm run build
 
 ## AI 추천 기능
 
-Google Gemini API를 활용한 개인화된 책 추천:
+OpenAI를 활용한 개인화된 책 추천:
 
 1. **상세 질문 플로우**: 단순히 "책 추천해줘"라고 하면 관심사와 선호도를 묻습니다
 2. **개인화**: 아이의 읽기 기록과 나이를 고려한 추천

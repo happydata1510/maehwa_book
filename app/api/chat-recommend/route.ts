@@ -1,12 +1,18 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/app/lib/supabase";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
-// Google Gemini API를 사용한 개인화된 책 추천
+// OpenAI GPT-4.1-nano를 사용한 개인화된 책 추천
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { message, age, readerName } = body ?? {};
+    const { message, age, readerName, history } = body ?? {};
+    const userMessage = (message || "").toString().trim();
+    if (!userMessage) {
+      return new Response(JSON.stringify({ reply: "어떤 책을 찾고 계신가요? 관심 주제나 상황을 알려주세요!" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     // 사용자의 읽기 기록 가져오기
     let readingHistory = "";
@@ -66,14 +72,14 @@ export async function POST(req: NextRequest) {
         .join(', ');
     }
 
-    // Google Gemini API 키가 없을 때 대체 응답
-    if (!process.env.GEMINI_API_KEY) {
+    // OpenAI API가 없으면 대체 응답
+    if (!process.env.OPENAI_API_KEY) {
       let reply = "";
       
       // 책 추천 요청 시 더 상세한 질문으로 유도
-      if (message.includes("추천")) {
+      if (/추천/.test(userMessage)) {
         reply = `${readerName ? `${readerName}에게` : '아이에게'} 맞는 책을 추천해드리고 싶어요! 더 정확한 추천을 위해 알려주세요:\n\n1. 현재 어떤 주제에 관심이 있나요? (동물, 공주, 자동차, 과학 등)\n2. 최근에 읽은 책과 비슷한 책을 원하시나요, 아니면 새로운 분야의 책을 원하시나요?\n\n이런 정보가 있으면 더 좋은 추천을 해드릴 수 있어요! 🌸`;
-      } else if (message.includes("안녕") || message.includes("반가")) {
+      } else if (/(안녕|반가)/.test(userMessage)) {
         reply = `안녕하세요! 매화유치원 AI 책 추천 도우미입니다. ${readerName ? `${readerName}에게` : '아이에게'} 딱 맞는 책을 찾아드릴게요! 📚✨`;
       } else {
         reply = "책 추천에 관련된 질문을 해주시면 도움을 드릴 수 있어요! '책 추천해줘'라고 말씀해보세요! 🌸";
@@ -84,56 +90,228 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Google Gemini 클라이언트 초기화
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // OpenAI 클라이언트 초기화 (gpt-4.1-nano)
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-    // 책 추천 시 상세 질문으로 유도하는 로직
-    const isRecommendationRequest = message.includes("추천");
+    // 책 추천 시 상세 질문으로 유도 + 소스 선택 유도
+    const isRecommendationRequest = /추천/.test(userMessage);
+    const wantsWeb = /(웹\s*검색|웹검색|인터넷|검색|\b2\b|2번)/.test(userMessage);
+    const wantsHistory = /(이력|기록|학생|최근|읽었던|비슷|\b1\b|1번)/.test(userMessage);
     
     let prompt = "";
     
-    if (isRecommendationRequest && !message.includes("관심") && !message.includes("비슷") && !message.includes("새로운")) {
-      // 단순 추천 요청 시 더 자세한 정보를 요청
-      prompt = `당신은 매화유치원의 친근한 책 추천 도우미입니다. 
-${readerName ? `${readerName} (${age}세)` : `${age}세 아이`}에게 더 정확한 책 추천을 위해 다음을 물어보세요:
+    if (isRecommendationRequest && !/(관심|비슷|새로운|웹\s*검색|웹검색|이력|기록|히스토리)/.test(userMessage) && !wantsWeb && !wantsHistory) {
+      // 단순 추천 요청 시 소스 선택을 포함해 더 자세한 정보를 요청
+      prompt = `역할: 매화유치원 책 추천 도우미
+목표: 4단계 대화 흐름을 따르되, 사용자의 답을 기억하며 반복하지 말 것
 
-1. 현재 아이가 관심있어하는 주제는? (동물, 공주, 자동차, 공룡, 과학 등)
-2. 읽었던 책들을 기반으로 추천하기 원하는지? 새로운 책을 원하는지?
+1) 먼저 아이의 상황/관심을 1문장으로 질문
+2) 이어서 "추천 소스"를 물음: 1) 학생 이력 기반 2) 인터넷 검색 기반 (숫자 1 또는 2로 답하도록 유도)
+3) 위 답변을 기억하여 최종 추천으로 진행
+4) 최종 추천: 3권 이하, 각 항목에 [제목, 지은이, 가격, 아주 간단한 줄거리] 포함. 실제 존재하는 책인지 확인(구글 북스 API 결과가 있는 제목을 우선) 후 출력.
 
-따뜻하고 친근한 톤으로 한국어로 200자 이내로 답변해주세요.`;
+지금은 1)번 단계만 질문하세요. 한국어, 1문장.`;
     } else {
-      // 상세 정보가 포함된 요청이거나 일반 대화
-      prompt = `당신은 매화유치원의 친근한 책 추천 도우미입니다. 
-한국어로 답변하고, 유치원생(3-7세)에게 적합한 책을 추천해주세요.
-답변은 250자 이내로 간결하고 친근하게 해주세요.
+      // 단계 흐름: 대화 이력에서 소스/관심을 추정하고 분기
+      const historyText = Array.isArray(history)
+        ? history.map((m: { role: string; content: string }) => `${m.role === 'user' ? '사용자' : '도우미'}: ${m.content}`).slice(-12).join('\n')
+        : '';
 
-현재 정보:
-- 아이 나이: ${age || '알 수 없음'}세
-- 아이 이름: ${readerName || '알 수 없음'}
-${readingHistory ? `- ${readerName}의 최근 읽은 책: ${readingHistory}` : ''}
-${popularBooks ? `- 유치원에서 인기 있는 책들: ${popularBooks}` : ''}
-
-사용자 메시지: "${message}"
-
-답변할 때 다음을 고려해주세요:
-1. 아이의 나이와 읽기 기록을 고려한 개인화된 추천
-2. 따뜻하고 격려하는 톤
-3. 구체적인 책 제목과 간단한 이유 제시
-4. 독서의 즐거움 강조`;
+      // 사용자 의도 파악
+      if (wantsWeb) {
+        // 웹검색 기반 즉시 실행 (아래 wantsWeb 분기에서 처리되므로 여기서는 패스)
+      } else if (wantsHistory) {
+        // 이력 기반 즉시 실행 (아래 wantsHistory 분기에서 처리되므로 여기서는 패스)
+      } else if (/공룡|동물|우주|감정|자연|과학|탈것|공주|동화|잠자리|그림책|그림/.test(userMessage)) {
+        // 관심 주제가 파악되었으면 2단계(소스 선택)로 유도
+        prompt = `아이 정보: 이름=${readerName || '알수없음'}, 나이=${age || '알수없음'}세
+최근 읽기: ${readingHistory || '없음'}
+대화 일부: ${historyText}
+사용자 메시지: ${userMessage}
+지금은 2)번 단계만 질문하세요. 문구: "추천 소스를 골라주세요. 1) 친구들이 읽었던 책 2) 온라인 검색 추천도서" (한국어, 1문장)`;
+      } else {
+        // 최종 추천 또는 일반 대화
+        prompt = `아이 정보: 이름=${readerName || '알수없음'}, 나이=${age || '알수없음'}세
+최근 읽기: ${readingHistory || '없음'}
+대화 일부: ${historyText}
+사용자 메시지: ${userMessage}
+요청: 3) 최종 추천을 수행하세요. 3권 이하, 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리] 포함. 실제 존재하는 책을 우선(구글 북스에 조회되는 제목). 한국어, 간결하게.`;
+      }
     }
 
-    // Gemini API 호출
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const reply = response.text() || "죄송해요, 지금은 답변을 드리기 어려워요. 나중에 다시 시도해주세요.";
+    // 온라인 검색 추천도서로 명시한 경우: 외부 후보 수집 후 LLM 랭킹
+    if (wantsWeb) {
+      // 대화 히스토리에서 관심 주제 추출
+      const historyText = Array.isArray(history)
+        ? history.map((m: { role: string; content: string }) => m.content).join(' ')
+        : '';
+      const topicMatch = (historyText + ' ' + userMessage).match(/(공룡|동물|우주|감정|자연|과학|탈것|공주|동화|잠자리|그림책)/);
+      const topic = topicMatch?.[0] || '어린이 추천 도서';
+
+      // 현재 학생이 읽었던 책 목록 (제외용)
+      const excludeBooks = readingHistory ? readingHistory.split(', ').map(book => book.replace(/"/g, '').split(' by ')[0]) : [];
+
+      // Open Library 검색
+      try {
+        const q = encodeURIComponent(topic);
+        const ol = await fetch(`https://openlibrary.org/search.json?q=${q}&language=kor|eng&limit=25`, { headers: { 'User-Agent': 'maehwa-book/1.0' } });
+        const json = await ol.json();
+        const candidates = (json.docs || []).map((d: any) => ({
+          title: d.title,
+          author: (d.author_name && d.author_name[0]) || '',
+          year: d.first_publish_year || null
+        }));
+
+        const webPrompt = `유치원생(3-7세)에게 적합한 주제 "${topic}"의 책을 3권 이하로 골라주세요. 아래 후보 중 실제 존재하는 책 위주로 선택하되, 다음 책들은 제외해주세요: ${excludeBooks.join(', ') || '없음'}. 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록 형태. 후보: ${JSON.stringify(candidates).slice(0, 5000)}`;
+
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4.1-nano',
+          messages: [
+            { role: 'system', content: '당신은 유아용 도서 큐레이터입니다. 한국어로 간결하고 따뜻하게 답변합니다. 응답은 JSON 배열 형태로만 출력하세요: [{"title":"제목","author":"작가","publisher":"출판사","summary":"줄거리"}]' },
+            { role: 'user', content: webPrompt }
+          ],
+          temperature: 0.2,
+          max_tokens: 500
+        });
+        
+        let recommendations = [];
+        try {
+          const content = completion.choices?.[0]?.message?.content || '[]';
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            recommendations = parsed.slice(0, 3);
+          }
+        } catch {
+          // JSON 파싱 실패시 기본 응답
+          const reply = `${topic} 주제의 책을 찾아보고 있어요. 조금 더 구체적인 주제를 알려주시면 더 정확한 추천을 해드릴 수 있어요!`;
+          return new Response(JSON.stringify({ reply }), { headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // Google Books API로 실제 존재 여부 확인
+        const verifiedBooks = [];
+        for (const book of recommendations) {
+          try {
+            const query = encodeURIComponent(`${book.title} ${book.author}`);
+            const gbRes = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${query}&langRestrict=ko&maxResults=5`);
+            const gbData = await gbRes.json();
+            
+            if (gbData.items && gbData.items.length > 0) {
+              // 실제 존재하는 책으로 확인됨
+              const item = gbData.items[0];
+              const volumeInfo = item.volumeInfo;
+              verifiedBooks.push({
+                title: volumeInfo.title || book.title,
+                author: (volumeInfo.authors && volumeInfo.authors[0]) || book.author,
+                publisher: volumeInfo.publisher || book.publisher || '출판사 미상',
+                summary: book.summary
+              });
+            }
+          } catch (e) {
+            // API 오류시 원본 정보 유지
+            verifiedBooks.push(book);
+          }
+          
+          if (verifiedBooks.length >= 3) break;
+        }
+
+        const reply = verifiedBooks.length > 0 
+          ? verifiedBooks.map((b, i) => `${i+1}. [${b.title}, ${b.author}, ${b.publisher}, ${b.summary}]`).join('\n')
+          : `${topic} 주제의 검증된 책을 찾지 못했어요. 다른 주제를 시도해보세요.`;
+        
+        return new Response(JSON.stringify({ reply }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (e) {
+        const reply = '웹검색 중 오류가 발생했어요. 주제를 바꿔 다시 시도해 주세요.';
+        return new Response(JSON.stringify({ reply }), { headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+
+    // 친구들이 읽었던 책으로 명시한 경우: 모든 학생의 읽기 기록을 활용한 추천
+    if (wantsHistory) {
+      // 모든 학생의 읽기 기록 가져오기
+      const { data: allReadings } = await supabase
+        .from('readings')
+        .select(`
+          book:books(title, author)
+        `)
+        .order('read_date', { ascending: false })
+        .limit(50);
+
+      let allBooksHistory = "";
+      if (allReadings && allReadings.length > 0) {
+        allBooksHistory = allReadings
+          .map(r => `"${(r.book as any)?.title}" by ${(r.book as any)?.author}`)
+          .join(', ');
+      }
+
+      if (!allBooksHistory || allBooksHistory.length < 10) {
+        // 친구들 읽기 기록이 부족하면 온라인 검색으로 대체
+        const historyText = Array.isArray(history)
+          ? history.map((m: { role: string; content: string }) => m.content).join(' ')
+          : '';
+        const topicMatch = (historyText + ' ' + userMessage).match(/(공룡|동물|우주|감정|자연|과학|탈것|공주|동화|잠자리|그림책)/);
+        const topic = topicMatch?.[0] || '어린이 추천 도서';
+
+        try {
+          const q = encodeURIComponent(topic);
+          const ol = await fetch(`https://openlibrary.org/search.json?q=${q}&language=kor|eng&limit=25`, { headers: { 'User-Agent': 'maehwa-book/1.0' } });
+          const json = await ol.json();
+          const candidates = (json.docs || []).map((d: any) => ({
+            title: d.title,
+            author: (d.author_name && d.author_name[0]) || '',
+            year: d.first_publish_year || null
+          }));
+
+          const fallbackPrompt = `친구들이 읽었던 책이 부족해서 온라인 검색으로 찾아드렸어요. 유치원생(3-7세)에게 적합한 주제 "${topic}"의 책을 3권 이하로 골라주세요. 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 후보: ${JSON.stringify(candidates).slice(0, 3000)}`;
+
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4.1-nano',
+            messages: [
+              { role: 'system', content: '당신은 유아 독서 큐레이터입니다. 따뜻하고 간결하게 한국어로 답합니다.' },
+              { role: 'user', content: fallbackPrompt }
+            ],
+            temperature: 0.4,
+            max_tokens: 400
+          });
+          const reply = `친구들이 읽었던 책이 부족해서 온라인 검색으로 추천해드렸어요!\n\n${completion.choices?.[0]?.message?.content || '적절한 책을 찾지 못했어요.'}`;
+          return new Response(JSON.stringify({ reply }), { headers: { 'Content-Type': 'application/json' } });
+        } catch (e) {
+          const reply = '친구들이 읽었던 책이 부족하고, 온라인 검색에서도 오류가 발생했어요. 다른 주제를 시도해보세요.';
+          return new Response(JSON.stringify({ reply }), { headers: { 'Content-Type': 'application/json' } });
+        }
+      }
+
+      const histPrompt = `다음은 친구들이 최근에 읽었던 책 목록입니다: ${allBooksHistory}. ${age || '알 수 없음'}세에게 적합하도록 3권 이하의 책을 추천하고, 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록.`;
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4.1-nano',
+        messages: [
+          { role: 'system', content: '당신은 유아 독서 큐레이터입니다. 따뜻하고 간결하게 한국어로 답합니다.' },
+          { role: 'user', content: histPrompt }
+        ],
+        temperature: 0.4,
+        max_tokens: 400
+      });
+      const reply = completion.choices?.[0]?.message?.content || '친구들이 읽었던 책을 바탕으로 한 추천을 생성하지 못했어요. 주제나 선호를 조금 더 알려 주세요.';
+      return new Response(JSON.stringify({ reply }), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // OpenAI 호출
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-nano",
+      messages: [
+        { role: "system", content: "당신은 매화유치원의 친근한 책 추천 도우미입니다. 한국어로 간결하고 친근하게 답변하세요." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 300
+    });
+    const reply = completion.choices?.[0]?.message?.content || "죄송해요, 지금은 답변을 드리기 어려워요. 나중에 다시 시도해주세요.";
 
     return new Response(JSON.stringify({ reply }), {
       headers: { "Content-Type": "application/json" },
     });
 
   } catch (error) {
-    console.error("Gemini API error:", error);
+    console.error("Chat recommend error:", error);
     
     // 에러 시 대체 응답
     const fallbackReply = "죄송해요, 지금은 AI 시스템에 문제가 있어서 답변을 드리기 어려워요. 잠시 후 다시 시도해주세요! 📚";

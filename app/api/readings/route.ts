@@ -19,7 +19,16 @@ export async function GET(req: NextRequest) {
       .order('read_date', { ascending: false });
 
     if (readerName) {
-      query = query.eq('reader.name', readerName);
+      const { data: reader } = await supabase
+        .from('readers')
+        .select('id')
+        .eq('name', readerName)
+        .single();
+      if (reader) {
+        query = query.eq('reader_id', reader.id);
+      } else {
+        return NextResponse.json({ total: 0, page, pageSize, items: [] });
+      }
     }
 
     // 페이지네이션을 위한 카운트
@@ -28,7 +37,16 @@ export async function GET(req: NextRequest) {
       .select('*', { count: 'exact', head: true });
 
     if (readerName) {
-      countQuery = countQuery.eq('reader.name', readerName);
+      const { data: reader } = await supabase
+        .from('readers')
+        .select('id')
+        .eq('name', readerName)
+        .single();
+      if (reader) {
+        countQuery = countQuery.eq('reader_id', reader.id);
+      } else {
+        return NextResponse.json({ total: 0, page, pageSize, items: [] });
+      }
     }
 
     // 데이터와 카운트를 병렬로 가져오기

@@ -29,7 +29,11 @@ export default function Home() {
       setLoading(true);
       
       // 최근 읽기 기록 가져오기
-      const itemsRes = await fetch('/api/readings?pageSize=10');
+      const params = new URLSearchParams();
+      params.set('pageSize', '10');
+      const rn = localStorage.getItem('activeReaderName');
+      if (rn) params.set('readerName', rn);
+      const itemsRes = await fetch(`/api/readings?${params.toString()}`);
       const itemsData = await itemsRes.json();
       setItems(itemsData.items || []);
       setTotal(itemsData.total || 0);
