@@ -1,0 +1,29 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 배경 -->
+  <rect width="512" height="512" rx="80" fill="#ec4899"/>
+  
+  <!-- 책 -->
+  <rect x="128" y="160" width="256" height="192" rx="8" fill="#ffffff"/>
+  <rect x="136" y="168" width="240" height="176" rx="4" fill="#fef7ff"/>
+  
+  <!-- 책 페이지 -->
+  <rect x="152" y="184" width="208" height="4" rx="2" fill="#ec4899" opacity="0.3"/>
+  <rect x="152" y="200" width="160" height="4" rx="2" fill="#ec4899" opacity="0.3"/>
+  <rect x="152" y="216" width="180" height="4" rx="2" fill="#ec4899" opacity="0.3"/>
+  <rect x="152" y="232" width="140" height="4" rx="2" fill="#ec4899" opacity="0.3"/>
+  
+  <!-- 매화꽃 -->
+  <g transform="translate(320, 280)">
+    <!-- 꽃잎 -->
+    <ellipse cx="0" cy="-12" rx="8" ry="16" fill="#fbbf24" transform="rotate(0)"/>
+    <ellipse cx="0" cy="-12" rx="8" ry="16" fill="#fbbf24" transform="rotate(72)"/>
+    <ellipse cx="0" cy="-12" rx="8" ry="16" fill="#fbbf24" transform="rotate(144)"/>
+    <ellipse cx="0" cy="-12" rx="8" ry="16" fill="#fbbf24" transform="rotate(216)"/>
+    <ellipse cx="0" cy="-12" rx="8" ry="16" fill="#fbbf24" transform="rotate(288)"/>
+    <!-- 중심 -->
+    <circle cx="0" cy="0" r="4" fill="#f59e0b"/>
+  </g>
+  
+  <!-- 제목 텍스트 -->
+  <text x="256" y="120" text-anchor="middle" fill="#ffffff" font-family="system-ui" font-size="36" font-weight="bold">책대장</text>
+</svg>

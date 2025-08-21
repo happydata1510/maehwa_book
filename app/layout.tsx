@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono, Jua, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
+import PWAInstaller from "./components/PWAInstaller";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -11,6 +12,17 @@ const jua = Jua({ variable: "--font-jua", subsets: ["latin"], weight: "400" });
 export const metadata: Metadata = {
   title: "매화유치원 책대장",
   description: "읽은 책을 빠르게 기록하고 뱃지를 모아요",
+  manifest: "/manifest.json",
+  themeColor: "#ec4899",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "매화독서",
+  },
+  icons: {
+    icon: "/icons/icon-192x192.png",
+    apple: "/icons/icon-192x192.png",
+  },
 };
 
 export default function RootLayout({
@@ -20,6 +32,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#ec4899" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+      </head>
       <body
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} ${notoSansKr.variable} ${jua.variable} antialiased min-h-screen bg-gradient-to-b from-pink-50 to-white text-gray-900`}
@@ -39,6 +57,7 @@ export default function RootLayout({
           </div>
         </nav>
         <main className="pb-12" style={{ fontFamily: "var(--font-noto-sans-kr)" }}>{children}</main>
+        <PWAInstaller />
       </body>
     </html>
   );
