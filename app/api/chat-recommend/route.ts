@@ -76,13 +76,15 @@ export async function POST(req: NextRequest) {
     if (!process.env.OPENAI_API_KEY) {
       let reply = "";
       
+      const ageText = age ? `${age}세` : '유치원생';
+      
       // 책 추천 요청 시 더 상세한 질문으로 유도
       if (/추천/.test(userMessage)) {
-        reply = `${readerName ? `${readerName}에게` : '아이에게'} 맞는 책을 추천해드리고 싶어요! 더 정확한 추천을 위해 알려주세요:\n\n1. 현재 어떤 주제에 관심이 있나요? (동물, 공주, 자동차, 과학 등)\n2. 최근에 읽은 책과 비슷한 책을 원하시나요, 아니면 새로운 분야의 책을 원하시나요?\n\n이런 정보가 있으면 더 좋은 추천을 해드릴 수 있어요! 🌸`;
+        reply = `${readerName ? `${readerName}(${ageText})에게` : `${ageText} 아이에게`} 맞는 동화책을 추천해드리고 싶어요! 더 정확한 추천을 위해 알려주세요:\n\n1. 현재 어떤 주제에 관심이 있나요? (동물, 공주, 자동차, 과학 등)\n2. 친구들이 읽었던 책을 원하시나요, 아니면 새로운 동화책을 원하시나요?\n\n이런 정보가 있으면 더 좋은 동화책 추천을 해드릴 수 있어요! 🌸`;
       } else if (/(안녕|반가)/.test(userMessage)) {
-        reply = `안녕하세요! 매화유치원 AI 책 추천 도우미입니다. ${readerName ? `${readerName}에게` : '아이에게'} 딱 맞는 책을 찾아드릴게요! 📚✨`;
+        reply = `안녕하세요! 매화유치원 동화책 추천 도우미입니다. ${readerName ? `${readerName}(${ageText})에게` : `${ageText} 아이에게`} 딱 맞는 동화책을 찾아드릴게요! 📚✨`;
       } else {
-        reply = "책 추천에 관련된 질문을 해주시면 도움을 드릴 수 있어요! '책 추천해줘'라고 말씀해보세요! 🌸";
+        reply = "동화책 추천에 관련된 질문을 해주시면 도움을 드릴 수 있어요! '동화책 추천해줘'라고 말씀해보세요! 🌸";
       }
 
       return new Response(JSON.stringify({ reply }), {
@@ -101,14 +103,19 @@ export async function POST(req: NextRequest) {
     let prompt = "";
     
     if (isRecommendationRequest && !/(관심|비슷|새로운|웹\s*검색|웹검색|이력|기록|히스토리)/.test(userMessage) && !wantsWeb && !wantsHistory) {
+      // 연령대 정보 포함
+      const ageText = age ? `${age}세` : '유치원생';
+      
       // 단순 추천 요청 시 소스 선택을 포함해 더 자세한 정보를 요청
-      prompt = `역할: 매화유치원 책 추천 도우미
+      prompt = `역할: 매화유치원 ${ageText} 아이를 위한 동화책 추천 도우미
 목표: 4단계 대화 흐름을 따르되, 사용자의 답을 기억하며 반복하지 말 것
 
+중요: ${ageText} 아이에게 적합한 동화책, 그림책, 창작동화 위주로 추천할 것
+
 1) 먼저 아이의 상황/관심을 1문장으로 질문
-2) 이어서 "추천 소스"를 물음: 1) 학생 이력 기반 2) 인터넷 검색 기반 (숫자 1 또는 2로 답하도록 유도)
+2) 이어서 "추천 소스"를 물음: 1) 친구들이 읽었던 책 2) 온라인 검색 추천도서 (숫자 1 또는 2로 답하도록 유도)
 3) 위 답변을 기억하여 최종 추천으로 진행
-4) 최종 추천: 3권 이하, 각 항목에 [제목, 지은이, 가격, 아주 간단한 줄거리] 포함. 실제 존재하는 책인지 확인(구글 북스 API 결과가 있는 제목을 우선) 후 출력.
+4) 최종 추천: ${ageText} 아이에게 적합한 동화책 3권 이하, 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리] 포함. 실제 존재하는 동화책인지 확인 후 출력.
 
 지금은 1)번 단계만 질문하세요. 한국어, 1문장.`;
     } else {
@@ -124,18 +131,28 @@ export async function POST(req: NextRequest) {
         // 이력 기반 즉시 실행 (아래 wantsHistory 분기에서 처리되므로 여기서는 패스)
       } else if (/공룡|동물|우주|감정|자연|과학|탈것|공주|동화|잠자리|그림책|그림/.test(userMessage)) {
         // 관심 주제가 파악되었으면 2단계(소스 선택)로 유도
-        prompt = `아이 정보: 이름=${readerName || '알수없음'}, 나이=${age || '알수없음'}세
+        const ageText = age ? `${age}세` : '유치원생';
+        prompt = `역할: 매화유치원 ${ageText} 동화책 추천 도우미
+아이 정보: 이름=${readerName || '알수없음'}, 나이=${ageText}
 최근 읽기: ${readingHistory || '없음'}
 대화 일부: ${historyText}
 사용자 메시지: ${userMessage}
+
+중요: ${ageText} 아이에게 적합한 동화책, 그림책 위주로 추천할 것
+
 지금은 2)번 단계만 질문하세요. 문구: "추천 소스를 골라주세요. 1) 친구들이 읽었던 책 2) 온라인 검색 추천도서" (한국어, 1문장)`;
       } else {
         // 최종 추천 또는 일반 대화
-        prompt = `아이 정보: 이름=${readerName || '알수없음'}, 나이=${age || '알수없음'}세
+        const ageText = age ? `${age}세` : '유치원생';
+        prompt = `역할: 매화유치원 ${ageText} 동화책 추천 도우미
+아이 정보: 이름=${readerName || '알수없음'}, 나이=${ageText}
 최근 읽기: ${readingHistory || '없음'}
 대화 일부: ${historyText}
 사용자 메시지: ${userMessage}
-요청: 3) 최종 추천을 수행하세요. 3권 이하, 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리] 포함. 실제 존재하는 책을 우선(구글 북스에 조회되는 제목). 한국어, 간결하게.`;
+
+중요: ${ageText} 아이에게 적합한 동화책, 그림책, 창작동화만 추천할 것
+
+요청: 3) 최종 추천을 수행하세요. ${ageText} 아이에게 적합한 동화책 3권 이하, 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리] 포함. 실제 존재하는 동화책을 우선(구글 북스에 조회되는 제목). 한국어, 간결하게.`;
       }
     }
 
@@ -162,12 +179,13 @@ export async function POST(req: NextRequest) {
           year: d.first_publish_year || null
         }));
 
-        const webPrompt = `유치원생(3-7세)에게 적합한 주제 "${topic}"의 책을 3권 이하로 골라주세요. 아래 후보 중 실제 존재하는 책 위주로 선택하되, 다음 책들은 제외해주세요: ${excludeBooks.join(', ') || '없음'}. 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록 형태. 후보: ${JSON.stringify(candidates).slice(0, 5000)}`;
+        const ageText = age ? `${age}세` : '유치원생(3-7세)';
+        const webPrompt = `${ageText} 아이에게 적합한 "${topic}" 주제의 동화책, 그림책을 3권 이하로 골라주세요. 아래 후보 중 실제 존재하는 동화책 위주로 선택하되, 다음 책들은 제외해주세요: ${excludeBooks.join(', ') || '없음'}. 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록 형태. 후보: ${JSON.stringify(candidates).slice(0, 5000)}`;
 
         const completion = await openai.chat.completions.create({
           model: 'gpt-4.1-nano',
           messages: [
-            { role: 'system', content: '당신은 유아용 도서 큐레이터입니다. 한국어로 간결하고 따뜻하게 답변합니다. 응답은 JSON 배열 형태로만 출력하세요: [{"title":"제목","author":"작가","publisher":"출판사","summary":"줄거리"}]' },
+            { role: 'system', content: '당신은 유치원생을 위한 동화책 전문 큐레이터입니다. 동화책, 그림책, 창작동화만 추천하세요. 한국어로 간결하고 따뜻하게 답변합니다. 응답은 JSON 배열 형태로만 출력하세요: [{"title":"제목","author":"지은이","publisher":"출판사","summary":"줄거리"}]' },
             { role: 'user', content: webPrompt }
           ],
           temperature: 0.2,
@@ -261,12 +279,13 @@ export async function POST(req: NextRequest) {
             year: d.first_publish_year || null
           }));
 
-          const fallbackPrompt = `친구들이 읽었던 책이 부족해서 온라인 검색으로 찾아드렸어요. 유치원생(3-7세)에게 적합한 주제 "${topic}"의 책을 3권 이하로 골라주세요. 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 후보: ${JSON.stringify(candidates).slice(0, 3000)}`;
+          const ageText = age ? `${age}세` : '유치원생(3-7세)';
+          const fallbackPrompt = `친구들이 읽었던 책이 부족해서 온라인 검색으로 찾아드렸어요. ${ageText} 아이에게 적합한 "${topic}" 주제의 동화책, 그림책을 3권 이하로 골라주세요. 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 후보: ${JSON.stringify(candidates).slice(0, 3000)}`;
 
           const completion = await openai.chat.completions.create({
             model: 'gpt-4.1-nano',
             messages: [
-              { role: 'system', content: '당신은 유아 독서 큐레이터입니다. 따뜻하고 간결하게 한국어로 답합니다.' },
+              { role: 'system', content: '당신은 유치원생을 위한 동화책 전문 큐레이터입니다. 동화책, 그림책, 창작동화만 추천하세요. 따뜻하고 간결하게 한국어로 답합니다.' },
               { role: 'user', content: fallbackPrompt }
             ],
             temperature: 0.4,
@@ -280,11 +299,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const histPrompt = `다음은 친구들이 최근에 읽었던 책 목록입니다: ${allBooksHistory}. ${age || '알 수 없음'}세에게 적합하도록 3권 이하의 책을 추천하고, 각 항목에 [제목, 작가, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록.`;
+      const ageText = age ? `${age}세` : '유치원생';
+      const histPrompt = `다음은 친구들이 최근에 읽었던 동화책 목록입니다: ${allBooksHistory}. ${ageText} 아이에게 적합한 동화책, 그림책을 3권 이하로 추천하고, 각 항목에 [제목, 지은이, 출판사, 아주 간단한 줄거리]를 한 줄로 작성하세요. 번호 목록.`;
       const completion = await openai.chat.completions.create({
         model: 'gpt-4.1-nano',
         messages: [
-          { role: 'system', content: '당신은 유아 독서 큐레이터입니다. 따뜻하고 간결하게 한국어로 답합니다.' },
+          { role: 'system', content: '당신은 유치원생을 위한 동화책 전문 큐레이터입니다. 동화책, 그림책, 창작동화만 추천하세요. 따뜻하고 간결하게 한국어로 답합니다.' },
           { role: 'user', content: histPrompt }
         ],
         temperature: 0.4,
@@ -298,7 +318,7 @@ export async function POST(req: NextRequest) {
     const completion = await openai.chat.completions.create({
       model: "gpt-4.1-nano",
       messages: [
-        { role: "system", content: "당신은 매화유치원의 친근한 책 추천 도우미입니다. 한국어로 간결하고 친근하게 답변하세요." },
+        { role: "system", content: "당신은 매화유치원의 동화책 전문 추천 도우미입니다. 유치원생을 위한 동화책, 그림책, 창작동화만 추천하세요. 한국어로 간결하고 친근하게 답변하세요." },
         { role: "user", content: prompt }
       ],
       temperature: 0.7,
